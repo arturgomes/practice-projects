@@ -1,0 +1,57 @@
+export const pt = {
+  app: { name: 'RunFácil' },
+  home: {
+    startRun: 'Iniciar Corrida',
+    noRuns: 'Nenhuma corrida ainda.\nComece sua primeira corrida!',
+  },
+  run: {
+    active: {
+      title: 'Corrida',
+      pause: 'Pausar',
+      resume: 'Retomar',
+      finish: 'Finalizar',
+      distance: 'Distância',
+      pace: 'Pace',
+      duration: 'Tempo',
+      heartRate: 'BPM',
+      waitingGPS: 'Aguardando GPS…',
+    },
+    summary: {
+      title: 'Resumo',
+      distance: 'Distância',
+      duration: 'Duração',
+      avgPace: 'Pace Médio',
+      bestPace: 'Melhor Pace',
+      avgHR: 'FC Média',
+      maxHR: 'FC Máx',
+      calories: 'Calorias',
+      save: 'Salvar Corrida',
+      discard: 'Descartar',
+    },
+  },
+  history: {
+    title: 'Histórico',
+    empty: 'Nenhuma corrida salva.',
+    detail: {
+      title: 'Detalhes',
+      delete: 'Excluir Corrida',
+      deleteConfirm: 'Tem certeza que deseja excluir esta corrida?',
+      deleteConfirmYes: 'Excluir',
+      deleteConfirmNo: 'Cancelar',
+    },
+  },
+  settings: {
+    title: 'Configurações',
+    themeLight: 'Claro',
+    themeDark: 'Escuro',
+    themeSystem: 'Sistema',
+    weight: 'Peso (kg)',
+    audioCues: 'Avisos de voz',
+    audioCuesDesc: 'Anunciar distância e pace a cada km',
+  },
+  audioCue: { km: '%{km} km — pace %{pace} por km' },
+  errors: {
+    generic: 'Algo deu errado. Tente novamente.',
+    noGPS: 'Sinal de GPS fraco. Aguarde ou tente em área aberta.',
+  },
+};
