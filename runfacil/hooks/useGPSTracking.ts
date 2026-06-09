@@ -1,12 +1,35 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import * as Location from 'expo-location';
-import { LOCATION_TASK_NAME } from '@/services/locationTask';
+import { DeviceEventEmitter, EmitterSubscription } from 'react-native';
+import { LOCATION_TASK_NAME, LOCATION_UPDATE_EVENT } from '@/services/locationTask';
+import { Coordinate } from '@/store/RunContext';
 
 export type TrackingStatus = 'idle' | 'starting' | 'active' | 'paused' | 'error';
 
-export function useGPSTracking() {
+type Options = {
+  onCoordinate?: (coord: Coordinate) => void;
+};
+
+export function useGPSTracking({ onCoordinate }: Options = {}) {
   const [status, setStatus] = useState<TrackingStatus>('idle');
   const [error, setError] = useState<string | null>(null);
+  const subscriptionRef = useRef<EmitterSubscription | null>(null);
+  // Keep callback ref stable so the event listener always calls the latest version.
+  const onCoordinateRef = useRef(onCoordinate);
+  useEffect(() => { onCoordinateRef.current = onCoordinate; }, [onCoordinate]);
+
+  const subscribe = useCallback(() => {
+    if (subscriptionRef.current) return;
+    subscriptionRef.current = DeviceEventEmitter.addListener(
+      LOCATION_UPDATE_EVENT,
+      (coord: Coordinate) => onCoordinateRef.current?.(coord)
+    );
+  }, []);
+
+  const unsubscribe = useCallback(() => {
+    subscriptionRef.current?.remove();
+    subscriptionRef.current = null;
+  }, []);
 
   const requestPermissions = useCallback(async (): Promise<boolean> => {
     const { status: fg } = await Location.requestForegroundPermissionsAsync();
@@ -24,6 +47,7 @@ export function useGPSTracking() {
       setError('Permissão de localização negada.');
       return;
     }
+    subscribe();
     await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
       accuracy: Location.Accuracy.BestForNavigation,
       distanceInterval: 5,
@@ -35,15 +59,24 @@ export function useGPSTracking() {
       },
     });
     setStatus('active');
-  }, [requestPermissions]);
+  }, [requestPermissions, subscribe]);
+
+  const pauseTracking = useCallback(async () => {
+    unsubscribe();
+    const running = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME).catch(() => false);
+    if (running) await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+    setStatus('paused');
+  }, [unsubscribe]);
 
   const stopTracking = useCallback(async () => {
-    const isRunning = await Location.hasStartedLocationUpdatesAsync(
-      LOCATION_TASK_NAME
-    ).catch(() => false);
-    if (isRunning) await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+    unsubscribe();
+    const running = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME).catch(() => false);
+    if (running) await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
     setStatus('idle');
-  }, []);
+  }, [unsubscribe]);
 
-  return { status, error, startTracking, stopTracking };
+  // Cleanup on unmount
+  useEffect(() => () => { unsubscribe(); }, [unsubscribe]);
+
+  return { status, error, startTracking, pauseTracking, resumeTracking: startTracking, stopTracking };
 }
