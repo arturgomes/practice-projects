@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Alert, BackHandler } from 'react-native';
+import { View, Text, StyleSheet, Alert, BackHandler, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -9,6 +9,8 @@ import { useRun, Coordinate, RunStatus } from '@/store/RunContext';
 import { useGPSTracking } from '@/hooks/useGPSTracking';
 import { useRunStorage, RunRecord } from '@/hooks/useRunStorage';
 import { useRunCalculations } from '@/hooks/useRunCalculations';
+import { useAudioCues } from '@/hooks/useAudioCues';
+import { useHeartRate } from '@/hooks/useHeartRate';
 import { RunMap } from '@/components/RunMap';
 import { LiveStats } from '@/components/LiveStats';
 import { RunControls } from '@/components/RunControls';
@@ -40,6 +42,9 @@ export default function ActiveRunScreen() {
   const { state, dispatch } = useRun();
   const { saveRun } = useRunStorage();
   const { calculateDistance, calculatePace, resetPaceWindow } = useRunCalculations();
+  const { checkMilestone, reset: resetAudioCues } = useAudioCues(settings.audioCuesEnabled);
+  const { heartRate: bleHR, isConnected: bleConnected, isScanning: bleScanning, startScan, stopScan, disconnect: bleDisconnect } =
+    useHeartRate();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const elapsed = useElapsedSeconds(state.startedAt, state.pausedDuration, state.status);
@@ -52,20 +57,31 @@ export default function ActiveRunScreen() {
   const { status: gpsStatus, error: gpsError, startTracking, pauseTracking, resumeTracking, stopTracking } =
     useGPSTracking({ onCoordinate: handleCoordinate });
 
-  // Recalculate distance + rolling pace after each new coordinate.
+  // Sync live BLE heart rate into RunContext.
+  useEffect(() => {
+    if (bleHR !== null) dispatch({ type: 'SET_HEART_RATE', payload: bleHR });
+  }, [bleHR, dispatch]);
+
+  // Recalculate distance + rolling pace, then check km milestones.
   useEffect(() => {
     if (state.status !== 'running' || state.coordinates.length < 2) return;
     const dist = calculateDistance(state.coordinates);
     dispatch({ type: 'SET_DISTANCE', payload: dist });
     const pace = calculatePace(dist);
-    if (pace > 0) dispatch({ type: 'SET_PACE', payload: pace });
-  }, [state.coordinates, state.status, calculateDistance, calculatePace, dispatch]);
+    if (pace > 0) {
+      dispatch({ type: 'SET_PACE', payload: pace });
+      checkMilestone(dist, pace);
+    }
+  }, [state.coordinates, state.status, calculateDistance, calculatePace, dispatch, checkMilestone]);
 
   const handleStart = useCallback(async () => {
     dispatch({ type: 'START', payload: { timestamp: Date.now() } });
     resetPaceWindow();
+    resetAudioCues();
     await startTracking();
-  }, [dispatch, resetPaceWindow, startTracking]);
+    // Attempt to connect to a nearby heart rate monitor automatically.
+    startScan();
+  }, [dispatch, resetPaceWindow, resetAudioCues, startTracking, startScan]);
 
   const handlePause = useCallback(async () => {
     dispatch({ type: 'PAUSE', payload: { timestamp: Date.now() } });
@@ -79,6 +95,7 @@ export default function ActiveRunScreen() {
 
   const handleFinish = useCallback(async () => {
     await stopTracking();
+    await bleDisconnect();
     dispatch({ type: 'FINISH' });
     const now = Date.now();
     const run: RunRecord = {
@@ -97,7 +114,7 @@ export default function ActiveRunScreen() {
     await saveRun(run);
     dispatch({ type: 'RESET' });
     router.replace(`/run/summary/${run.id}`);
-  }, [stopTracking, dispatch, state, elapsed, saveRun, router, settings.weightKg]);
+  }, [stopTracking, bleDisconnect, dispatch, state, elapsed, saveRun, router, settings.weightKg]);
 
   // Intercept hardware back button during active or paused run.
   useEffect(() => {
@@ -113,6 +130,7 @@ export default function ActiveRunScreen() {
             style: 'destructive',
             onPress: async () => {
               await stopTracking();
+              await bleDisconnect();
               dispatch({ type: 'RESET' });
               router.back();
             },
@@ -122,7 +140,7 @@ export default function ActiveRunScreen() {
       return true;
     });
     return () => handler.remove();
-  }, [state.status, stopTracking, dispatch, router]);
+  }, [state.status, stopTracking, bleDisconnect, dispatch, router]);
 
   const isActive = state.status !== 'idle';
 
@@ -146,6 +164,22 @@ export default function ActiveRunScreen() {
                 {gpsStatus === 'active' ? `${state.coordinates.length} pts` : 'GPS…'}
               </Text>
             </View>
+            {/* BLE heart rate pill — top-left corner overlay */}
+            {(bleConnected || bleScanning) && (
+              <View style={[
+                styles.blePill,
+                { top: insets.top + 12, backgroundColor: colors.surface + 'EE' },
+              ]}>
+                <Ionicons
+                  name={bleConnected ? 'heart' : 'bluetooth'}
+                  size={12}
+                  color={bleConnected ? colors.heartRate : colors.warning}
+                />
+                <Text style={[styles.gpsLabel, { color: colors.text }]}>
+                  {bleConnected ? `${state.heartRate ?? '–'} bpm` : 'BLE…'}
+                </Text>
+              </View>
+            )}
             {gpsError ? (
               <View style={[styles.errorBanner, { backgroundColor: colors.danger }]}>
                 <Text style={styles.errorBannerText}>{gpsError}</Text>
@@ -159,6 +193,32 @@ export default function ActiveRunScreen() {
             <Text style={[styles.idleHint, { color: colors.textSecondary }]}>
               {'Pressione Iniciar e o mapa\naparece automaticamente'}
             </Text>
+
+            {/* BLE pairing button */}
+            <TouchableOpacity
+              style={[
+                styles.bleBtn,
+                {
+                  backgroundColor: bleConnected ? colors.success + '22' : colors.surface,
+                  borderColor: bleConnected ? colors.success : colors.border,
+                },
+              ]}
+              onPress={bleConnected ? bleDisconnect : bleScanning ? stopScan : startScan}
+              activeOpacity={0.75}
+            >
+              <Ionicons
+                name={bleConnected ? 'heart' : bleScanning ? 'bluetooth' : 'watch-outline'}
+                size={16}
+                color={bleConnected ? colors.success : bleScanning ? colors.warning : colors.textSecondary}
+              />
+              <Text style={[styles.bleBtnLabel, { color: bleConnected ? colors.success : colors.textSecondary }]}>
+                {bleConnected
+                  ? 'Relógio conectado'
+                  : bleScanning
+                  ? 'Buscando relógio…'
+                  : 'Conectar relógio'}
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
       </View>
@@ -207,8 +267,34 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 3,
   },
+  blePill: {
+    position: 'absolute',
+    left: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+  },
   gpsDot: { width: 8, height: 8, borderRadius: 4 },
   gpsLabel: { fontSize: 12, fontFamily: 'SFProDisplay-Medium' },
   errorBanner: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 10 },
   errorBannerText: { color: '#FFF', textAlign: 'center', fontSize: 13, fontFamily: 'SFProDisplay-Regular' },
+  bleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    marginTop: 4,
+  },
+  bleBtnLabel: { fontSize: 13, fontFamily: 'SFProDisplay-Regular' },
 });

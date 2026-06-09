@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useSettings } from '@/hooks/useSettings';
 import { useRunStorage, RunRecord } from '@/hooks/useRunStorage';
+import { useHealthConnect } from '@/hooks/useHealthConnect';
 import { formatDistance, formatDuration, formatPace } from '@/constants/units';
 import { Colors } from '@/constants/theme';
 import { t } from '@/i18n';
@@ -12,13 +13,43 @@ import { t } from '@/i18n';
 export default function RunSummaryScreen() {
   const { colors } = useSettings();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { loadRuns } = useRunStorage();
+  const { loadRuns, updateRun } = useRunStorage();
+  const { fetchPostRunData } = useHealthConnect();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [run, setRun] = useState<RunRecord | null>(null);
+  const [hcLoading, setHcLoading] = useState(false);
 
   useEffect(() => {
-    loadRuns().then((runs) => setRun(runs.find((r) => r.id === id) ?? null));
+    loadRuns().then(async (runs) => {
+      const found = runs.find((r) => r.id === id) ?? null;
+      setRun(found);
+
+      // Try to enrich with Health Connect data if no HR was recorded live.
+      if (found && found.avgHeartRate === null) {
+        setHcLoading(true);
+        try {
+          const startTime = new Date(found.startedAt).toISOString();
+          const endTime = new Date(found.finishedAt).toISOString();
+          const hcData = await fetchPostRunData(startTime, endTime);
+
+          if (hcData.avgHeartRate !== null || hcData.calories !== null) {
+            const patch: Partial<RunRecord> = {};
+            if (hcData.avgHeartRate !== null) patch.avgHeartRate = hcData.avgHeartRate;
+            if (hcData.maxHeartRate !== null) patch.maxHeartRate = hcData.maxHeartRate;
+            if (hcData.calories !== null && found.caloriesKcal === 0) {
+              patch.caloriesKcal = hcData.calories;
+            }
+            await updateRun(found.id, patch);
+            setRun((prev) => (prev ? { ...prev, ...patch } : prev));
+          }
+        } catch {
+          // Health Connect unavailable — silently ignore.
+        } finally {
+          setHcLoading(false);
+        }
+      }
+    });
   }, [id]);
 
   if (!run) {
@@ -55,12 +86,23 @@ export default function RunSummaryScreen() {
           <StatRow label={t('run.summary.calories')} value={`${run.caloriesKcal} kcal`} colors={colors} last />
         </View>
 
-        {/* Heart rate card — shown only if data available */}
-        {run.avgHeartRate !== null && (
+        {/* Heart rate card — shown once data is available or loading */}
+        {(run.avgHeartRate !== null || hcLoading) && (
           <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 12 }]}>
-            <StatRow label={t('run.summary.avgHR')} value={`${run.avgHeartRate} bpm`} colors={colors} />
-            {run.maxHeartRate !== null && (
-              <StatRow label={t('run.summary.maxHR')} value={`${run.maxHeartRate} bpm`} colors={colors} last />
+            {hcLoading ? (
+              <View style={styles.hcLoadingRow}>
+                <ActivityIndicator size='small' color={colors.heartRate} />
+                <Text style={[styles.hcLoadingLabel, { color: colors.textSecondary }]}>
+                  Buscando dados do relógio…
+                </Text>
+              </View>
+            ) : (
+              <>
+                <StatRow label={t('run.summary.avgHR')} value={`${run.avgHeartRate} bpm`} colors={colors} />
+                {run.maxHeartRate !== null && (
+                  <StatRow label={t('run.summary.maxHR')} value={`${run.maxHeartRate} bpm`} colors={colors} last />
+                )}
+              </>
             )}
           </View>
         )}
@@ -159,6 +201,14 @@ const styles = StyleSheet.create({
   },
   statLabel: { fontSize: 15, fontFamily: 'SFProDisplay-Regular' },
   statValue: { fontSize: 15, fontWeight: '600', fontFamily: 'SFProDisplay-Medium' },
+  hcLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  hcLoadingLabel: { fontSize: 14, fontFamily: 'SFProDisplay-Regular' },
   footer: {
     padding: 20,
     gap: 10,
