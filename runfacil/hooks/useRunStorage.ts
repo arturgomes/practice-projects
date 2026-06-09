@@ -29,6 +29,15 @@ async function saveRun(run: RunRecord): Promise<void> {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(runs));
 }
 
+async function updateRun(id: string, patch: Partial<RunRecord>): Promise<void> {
+  const runs = await loadRuns();
+  const idx = runs.findIndex((r) => r.id === id);
+  if (idx !== -1) {
+    runs[idx] = { ...runs[idx], ...patch };
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(runs));
+  }
+}
+
 async function deleteRun(id: string): Promise<void> {
   const runs = await loadRuns();
   await AsyncStorage.setItem(
@@ -38,5 +47,5 @@ async function deleteRun(id: string): Promise<void> {
 }
 
 export function useRunStorage() {
-  return { loadRuns, saveRun, deleteRun };
+  return { loadRuns, saveRun, updateRun, deleteRun };
 }
