@@ -1,4 +1,5 @@
-import '@/services/locationTask'; // register background GPS task at module load
+import '@/services/locationTask';
+import Mapbox from '@rnmapbox/maps';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -8,6 +9,10 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { SettingsProvider, useSettings } from '@/hooks/useSettings';
 import { RunProvider } from '@/store/RunContext';
+
+// Use MapLibre tile server — no Mapbox token required.
+Mapbox.setWellKnownTileServer('MapLibre');
+Mapbox.setAccessToken('');
 
 SplashScreen.preventAutoHideAsync();
 

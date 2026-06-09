@@ -1,46 +1,42 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Alert, BackHandler } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useKeepAwake } from 'expo-keep-awake';
+import { Ionicons } from '@expo/vector-icons';
 import { useSettings } from '@/hooks/useSettings';
 import { useRun, Coordinate, RunStatus } from '@/store/RunContext';
 import { useGPSTracking } from '@/hooks/useGPSTracking';
 import { useRunStorage, RunRecord } from '@/hooks/useRunStorage';
 import { useRunCalculations } from '@/hooks/useRunCalculations';
+import { RunMap } from '@/components/RunMap';
 import { LiveStats } from '@/components/LiveStats';
 import { RunControls } from '@/components/RunControls';
 import { estimateCalories } from '@/constants/units';
 
-// Computes elapsed run seconds, pausing the counter when status !== 'running'.
 function useElapsedSeconds(
   startedAt: number | null,
   pausedDuration: number,
   status: RunStatus
 ): number {
   const [elapsed, setElapsed] = useState(0);
-
   useEffect(() => {
     if (status !== 'running' || !startedAt) {
       if (status === 'idle') setElapsed(0);
       return;
     }
-    // Compute immediately on resume so there's no 1-second lag.
     setElapsed(Math.floor((Date.now() - startedAt - pausedDuration) / 1000));
     const interval = setInterval(() => {
       setElapsed(Math.floor((Date.now() - startedAt - pausedDuration) / 1000));
     }, 1000);
     return () => clearInterval(interval);
   }, [status, startedAt, pausedDuration]);
-
   return elapsed;
 }
 
 export default function ActiveRunScreen() {
   useKeepAwake();
-
-  const { colors } = useSettings();
-  const { settings } = useSettings();
+  const { colors, settings } = useSettings();
   const { state, dispatch } = useRun();
   const { saveRun } = useRunStorage();
   const { calculateDistance, calculatePace, resetPaceWindow } = useRunCalculations();
@@ -48,7 +44,6 @@ export default function ActiveRunScreen() {
   const insets = useSafeAreaInsets();
   const elapsed = useElapsedSeconds(state.startedAt, state.pausedDuration, state.status);
 
-  // Receive each GPS coordinate and append it to the run context.
   const handleCoordinate = useCallback(
     (coord: Coordinate) => dispatch({ type: 'ADD_COORDINATE', payload: coord }),
     [dispatch]
@@ -57,7 +52,7 @@ export default function ActiveRunScreen() {
   const { status: gpsStatus, error: gpsError, startTracking, pauseTracking, resumeTracking, stopTracking } =
     useGPSTracking({ onCoordinate: handleCoordinate });
 
-  // Recalculate distance and rolling pace whenever coordinates array grows.
+  // Recalculate distance + rolling pace after each new coordinate.
   useEffect(() => {
     if (state.status !== 'running' || state.coordinates.length < 2) return;
     const dist = calculateDistance(state.coordinates);
@@ -85,7 +80,6 @@ export default function ActiveRunScreen() {
   const handleFinish = useCallback(async () => {
     await stopTracking();
     dispatch({ type: 'FINISH' });
-
     const now = Date.now();
     const run: RunRecord = {
       id: `run_${now}`,
@@ -105,7 +99,7 @@ export default function ActiveRunScreen() {
     router.replace(`/run/summary/${run.id}`);
   }, [stopTracking, dispatch, state, elapsed, saveRun, router, settings.weightKg]);
 
-  // Intercept hardware back button during an active/paused run.
+  // Intercept hardware back button during active or paused run.
   useEffect(() => {
     const handler = BackHandler.addEventListener('hardwareBackPress', () => {
       if (state.status !== 'running' && state.status !== 'paused') return false;
@@ -135,30 +129,41 @@ export default function ActiveRunScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
 
-      {/* Map area — replaced with MapLibre in Phase 2 */}
-      <View style={[styles.mapArea, { backgroundColor: colors.card }]}>
-        {!isActive ? (
-          <Text style={[styles.hint, { color: colors.textSecondary }]}>
-            {'Pressione Iniciar\npara começar'}
-          </Text>
-        ) : (
-          <View style={styles.gpsInfo}>
-            <View style={[styles.gpsDot, {
-              backgroundColor: gpsStatus === 'active' ? colors.success : colors.warning,
-            }]} />
-            <Text style={[styles.hint, { color: colors.textSecondary }]}>
-              {gpsStatus === 'active'
-                ? `${state.coordinates.length} pontos GPS capturados`
-                : 'Aguardando GPS…'}
-            </Text>
+      {/* Map area: placeholder when idle, live map once running */}
+      <View style={styles.mapWrapper}>
+        {isActive ? (
+          <>
+            <RunMap coordinates={state.coordinates} mode='live' />
+            {/* GPS status pill — top-right corner overlay */}
+            <View style={[
+              styles.gpsPill,
+              { top: insets.top + 12, backgroundColor: colors.surface + 'EE' },
+            ]}>
+              <View style={[styles.gpsDot, {
+                backgroundColor: gpsStatus === 'active' ? colors.success : colors.warning,
+              }]} />
+              <Text style={[styles.gpsLabel, { color: colors.text }]}>
+                {gpsStatus === 'active' ? `${state.coordinates.length} pts` : 'GPS…'}
+              </Text>
+            </View>
             {gpsError ? (
-              <Text style={[styles.errorText, { color: colors.danger }]}>{gpsError}</Text>
+              <View style={[styles.errorBanner, { backgroundColor: colors.danger }]}>
+                <Text style={styles.errorBannerText}>{gpsError}</Text>
+              </View>
             ) : null}
+          </>
+        ) : (
+          <View style={[styles.idlePlaceholder, { backgroundColor: colors.card }]}>
+            <Ionicons name='location-outline' size={52} color={colors.primary} />
+            <Text style={[styles.idleTitle, { color: colors.text }]}>Pronto para correr?</Text>
+            <Text style={[styles.idleHint, { color: colors.textSecondary }]}>
+              {'Pressione Iniciar e o mapa\naparece automaticamente'}
+            </Text>
           </View>
         )}
       </View>
 
-      {/* Stats panel — hidden until run starts */}
+      {/* Live stats — hidden until run starts */}
       {isActive && (
         <LiveStats
           distanceMeters={state.distance}
@@ -168,7 +173,6 @@ export default function ActiveRunScreen() {
         />
       )}
 
-      {/* Start / Pause / Resume / Finish controls */}
       <View style={{ paddingBottom: insets.bottom + 8 }}>
         <RunControls
           status={state.status}
@@ -178,16 +182,33 @@ export default function ActiveRunScreen() {
           onFinish={handleFinish}
         />
       </View>
-
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  mapArea: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  gpsInfo: { alignItems: 'center', gap: 10 },
-  gpsDot: { width: 14, height: 14, borderRadius: 7 },
-  hint: { fontSize: 15, fontFamily: 'SFProDisplay-Regular', textAlign: 'center', lineHeight: 22 },
-  errorText: { fontSize: 13, fontFamily: 'SFProDisplay-Regular', textAlign: 'center' },
+  mapWrapper: { flex: 1, position: 'relative' },
+  idlePlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14 },
+  idleTitle: { fontSize: 20, fontWeight: '700', fontFamily: 'SFProDisplay-Bold' },
+  idleHint: { fontSize: 14, fontFamily: 'SFProDisplay-Regular', textAlign: 'center', lineHeight: 20 },
+  gpsPill: {
+    position: 'absolute',
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+  },
+  gpsDot: { width: 8, height: 8, borderRadius: 4 },
+  gpsLabel: { fontSize: 12, fontFamily: 'SFProDisplay-Medium' },
+  errorBanner: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 10 },
+  errorBannerText: { color: '#FFF', textAlign: 'center', fontSize: 13, fontFamily: 'SFProDisplay-Regular' },
 });
