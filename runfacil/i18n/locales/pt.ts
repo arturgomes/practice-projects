@@ -25,6 +25,7 @@ export const pt = {
       avgHR: 'FC Média',
       maxHR: 'FC Máx',
       calories: 'Calorias',
+      steps: 'Passos',
       save: 'Salvar Corrida',
       discard: 'Descartar',
     },

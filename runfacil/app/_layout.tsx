@@ -1,5 +1,4 @@
 import '@/services/locationTask';
-import Mapbox from '@rnmapbox/maps';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -10,9 +9,7 @@ import { useEffect } from 'react';
 import { SettingsProvider, useSettings } from '@/hooks/useSettings';
 import { RunProvider } from '@/store/RunContext';
 
-// Use MapLibre tile server — no Mapbox token required.
-Mapbox.setWellKnownTileServer('MapLibre');
-Mapbox.setAccessToken('');
+// MapLibre needs no access token — free OSM tiles configured per-map.
 
 SplashScreen.preventAutoHideAsync();
 
@@ -44,9 +41,9 @@ function AppNavigator() {
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
-    'SFProDisplay-Regular': require('@/assets/fonts/SFProDisplay-Regular.otf'),
-    'SFProDisplay-Medium': require('@/assets/fonts/SFProDisplay-Medium.otf'),
-    'SFProDisplay-Bold': require('@/assets/fonts/SFProDisplay-Bold.otf'),
+    'SFProDisplay-Regular': require('@expo-google-fonts/inter/400Regular/Inter_400Regular.ttf'),
+    'SFProDisplay-Medium': require('@expo-google-fonts/inter/500Medium/Inter_500Medium.ttf'),
+    'SFProDisplay-Bold': require('@expo-google-fonts/inter/700Bold/Inter_700Bold.ttf'),
   });
 
   useEffect(() => {

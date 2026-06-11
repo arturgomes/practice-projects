@@ -36,13 +36,27 @@
         "FOREGROUND_SERVICE_LOCATION",
         "BLUETOOTH",
         "BLUETOOTH_CONNECT",
-        "BLUETOOTH_SCAN"
+        "BLUETOOTH_SCAN",
+        "android.permission.health.READ_HEART_RATE",
+        "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
+        "android.permission.health.READ_STEPS"
       ]
     },
     "plugins": [
       "expo-router",
       "expo-asset",
       "expo-localization",
+      "@maplibre/maplibre-react-native",
+      "expo-health-connect",
+      "./plugins/withHealthConnectQueries",
+      [
+        "@kingstinct/react-native-healthkit",
+        {
+          "NSHealthShareUsageDescription": "RunFácil lê frequência cardíaca e calorias do Apple Health para enriquecer o resumo da sua corrida.",
+          "NSHealthUpdateUsageDescription": false,
+          "background": false
+        }
+      ],
       [
         "expo-location",
         {
@@ -55,7 +69,9 @@
         {
           "android": {
             "newArchEnabled": true,
-            "minSdkVersion": 26
+            "minSdkVersion": 26,
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36
           },
           "ios": {
             "newArchEnabled": true

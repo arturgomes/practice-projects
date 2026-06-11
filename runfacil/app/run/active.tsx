@@ -9,6 +9,7 @@ import { useRun, Coordinate, RunStatus } from '@/store/RunContext';
 import { useGPSTracking } from '@/hooks/useGPSTracking';
 import { useRunStorage, RunRecord } from '@/hooks/useRunStorage';
 import { useRunCalculations } from '@/hooks/useRunCalculations';
+import { useHealthData } from '@/hooks/useHealthData';
 import { RunMap } from '@/components/RunMap';
 import { LiveStats } from '@/components/LiveStats';
 import { RunControls } from '@/components/RunControls';
@@ -39,6 +40,7 @@ export default function ActiveRunScreen() {
   const { colors, settings } = useSettings();
   const { state, dispatch } = useRun();
   const { saveRun } = useRunStorage();
+  const { requestPermissions, fetchPostRunData } = useHealthData();
   const { calculateDistance, calculatePace, resetPaceWindow } = useRunCalculations();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -64,8 +66,10 @@ export default function ActiveRunScreen() {
   const handleStart = useCallback(async () => {
     dispatch({ type: 'START', payload: { timestamp: Date.now() } });
     resetPaceWindow();
+    // Prompt for health permissions up front so post-run metrics are available.
+    requestPermissions().catch(() => {});
     await startTracking();
-  }, [dispatch, resetPaceWindow, startTracking]);
+  }, [dispatch, resetPaceWindow, startTracking, requestPermissions]);
 
   const handlePause = useCallback(async () => {
     dispatch({ type: 'PAUSE', payload: { timestamp: Date.now() } });
@@ -81,23 +85,30 @@ export default function ActiveRunScreen() {
     await stopTracking();
     dispatch({ type: 'FINISH' });
     const now = Date.now();
+    const startedAt = state.startedAt ?? now;
+
+    // Backfill heart rate / calories from the platform health store (HealthKit on
+    // iOS) for the run window; fall back to live BLE / estimate when unavailable.
+    const health = await fetchPostRunData(new Date(startedAt), new Date(now));
+
     const run: RunRecord = {
       id: `run_${now}`,
-      startedAt: state.startedAt ?? now,
+      startedAt,
       finishedAt: now,
       durationSeconds: elapsed,
       distanceMeters: state.distance,
       avgPaceSecPerKm: state.distance > 0 ? (elapsed / state.distance) * 1000 : 0,
       bestPaceSecPerKm: state.pace,
-      avgHeartRate: state.heartRate,
-      maxHeartRate: state.heartRate,
-      caloriesKcal: estimateCalories(elapsed, settings.weightKg),
+      avgHeartRate: health.avgHeartRate ?? state.heartRate,
+      maxHeartRate: health.maxHeartRate ?? state.heartRate,
+      caloriesKcal: health.calories ?? estimateCalories(elapsed, settings.weightKg),
+      steps: health.steps,
       coordinates: state.coordinates,
     };
     await saveRun(run);
     dispatch({ type: 'RESET' });
     router.replace(`/run/summary/${run.id}`);
-  }, [stopTracking, dispatch, state, elapsed, saveRun, router, settings.weightKg]);
+  }, [stopTracking, dispatch, state, elapsed, saveRun, router, settings.weightKg, fetchPostRunData]);
 
   // Intercept hardware back button during active or paused run.
   useEffect(() => {

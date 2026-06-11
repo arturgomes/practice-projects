@@ -101,7 +101,10 @@ export default function RunDetailScreen() {
         <View style={styles.section}>
           <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <StatRow label='Melhor pace' value={`${formatPace(run.bestPaceSecPerKm)}/km`} colors={colors} />
-            <StatRow label={t('run.summary.calories')} value={`${run.caloriesKcal} kcal`} colors={colors} last />
+            <StatRow label={t('run.summary.calories')} value={`${run.caloriesKcal} kcal`} colors={colors} last={run.steps == null} />
+            {run.steps != null && (
+              <StatRow label={t('run.summary.steps')} value={`${run.steps}`} colors={colors} last />
+            )}
           </View>
 
           {run.avgHeartRate !== null && (

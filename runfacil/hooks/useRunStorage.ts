@@ -12,6 +12,7 @@ export type RunRecord = {
   avgHeartRate: number | null;
   maxHeartRate: number | null;
   caloriesKcal: number;
+  steps?: number | null;
   coordinates: Coordinate[];
   notes?: string;
 };

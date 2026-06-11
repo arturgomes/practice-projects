@@ -8,7 +8,7 @@ export const LOCATION_UPDATE_EVENT = 'RUNFACIL_LOCATION_UPDATE';
 type LocationTaskData = { locations: Location.LocationObject[] };
 
 // Must be defined at module top-level; imported once in app/_layout.tsx.
-TaskManager.defineTask<LocationTaskData>(LOCATION_TASK_NAME, ({ data, error }) => {
+TaskManager.defineTask<LocationTaskData>(LOCATION_TASK_NAME, async ({ data, error }) => {
   if (error) {
     console.error('[LocationTask]', error.message);
     return;

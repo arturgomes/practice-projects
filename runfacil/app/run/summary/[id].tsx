@@ -52,7 +52,10 @@ export default function RunSummaryScreen() {
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <StatRow label={t('run.summary.duration')} value={formatDuration(run.durationSeconds)} colors={colors} />
           <StatRow label={t('run.summary.avgPace')} value={`${formatPace(run.avgPaceSecPerKm)}/km`} colors={colors} />
-          <StatRow label={t('run.summary.calories')} value={`${run.caloriesKcal} kcal`} colors={colors} last />
+          <StatRow label={t('run.summary.calories')} value={`${run.caloriesKcal} kcal`} colors={colors} last={run.steps == null} />
+          {run.steps != null && (
+            <StatRow label={t('run.summary.steps')} value={`${run.steps}`} colors={colors} last />
+          )}
         </View>
 
         {/* Heart rate card — shown only if data available */}

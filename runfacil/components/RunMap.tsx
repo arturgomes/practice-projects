@@ -1,6 +1,13 @@
 import React, { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
-import Mapbox from '@rnmapbox/maps';
+import {
+  Map,
+  Camera,
+  UserLocation,
+  GeoJSONSource,
+  Layer,
+  type LngLatBounds,
+} from '@maplibre/maplibre-react-native';
 import { Coordinate } from '@/store/RunContext';
 
 // Free OpenStreetMap-based style via OpenFreeMap — no API key required.
@@ -21,89 +28,68 @@ export function RunMap({ coordinates, mode = 'live' }: Props) {
         coordinates: coordinates.map((c) => [c.lng, c.lat]),
       },
       properties: {},
-    };
+    } as GeoJSON.Feature;
   }, [coordinates]);
 
-  const cameraBounds = useMemo(() => {
+  // LngLatBounds = [west, south, east, north]
+  const cameraBounds = useMemo<LngLatBounds | undefined>(() => {
     if (mode !== 'static' || coordinates.length < 2) return undefined;
     const lats = coordinates.map((c) => c.lat);
     const lngs = coordinates.map((c) => c.lng);
-    return {
-      ne: [Math.max(...lngs), Math.max(...lats)] as [number, number],
-      sw: [Math.min(...lngs), Math.min(...lats)] as [number, number],
-      paddingTop: 64,
-      paddingBottom: 64,
-      paddingLeft: 48,
-      paddingRight: 48,
-    };
+    return [
+      Math.min(...lngs),
+      Math.min(...lats),
+      Math.max(...lngs),
+      Math.max(...lats),
+    ];
   }, [mode, coordinates]);
 
   return (
     <View style={styles.container}>
-      <Mapbox.MapView
+      <Map
         style={styles.map}
-        styleURL={OSM_STYLE}
-        logoEnabled={false}
-        compassEnabled={false}
-        scaleBarEnabled={false}
-        scrollEnabled={mode === 'static'}
-        zoomEnabled={mode === 'static'}
-        rotateEnabled={false}
-        pitchEnabled={false}
+        mapStyle={OSM_STYLE}
+        logo={false}
+        compass={false}
+        scaleBar={false}
+        dragPan={mode === 'static'}
+        touchZoom={mode === 'static'}
+        touchRotate={false}
+        touchPitch={false}
         attributionPosition={{ bottom: 8, right: 8 }}
       >
         {mode === 'live' ? (
-          <Mapbox.Camera
-            followUserLocation
-            followZoomLevel={16}
-            followUserMode='course'
-            animationMode='flyTo'
-            animationDuration={500}
-          />
+          <Camera trackUserLocation='course' zoom={16} />
         ) : cameraBounds ? (
-          <Mapbox.Camera
+          <Camera
             bounds={cameraBounds}
-            animationMode='none'
-            animationDuration={0}
+            padding={{ top: 64, bottom: 64, left: 48, right: 48 }}
           />
         ) : (
-          <Mapbox.Camera zoomLevel={14} animationMode='none' />
+          <Camera zoom={14} />
         )}
 
         {/* Live user location puck — only during active run */}
-        {mode === 'live' && (
-          <Mapbox.UserLocation
-            visible
-            animated
-            renderMode='native'
-            showsUserHeadingIndicator
-          />
-        )}
+        {mode === 'live' && <UserLocation animated heading />}
 
         {/* Route polyline with drop shadow for contrast on any map style */}
         {lineGeoJSON && (
-          <Mapbox.ShapeSource id='route' shape={lineGeoJSON as any}>
-            <Mapbox.LineLayer
+          <GeoJSONSource id='route' data={lineGeoJSON}>
+            <Layer
+              type='line'
               id='routeShadow'
-              style={{
-                lineColor: 'rgba(0,0,0,0.15)',
-                lineWidth: 8,
-                lineCap: 'round',
-                lineJoin: 'round',
-              }}
+              layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+              paint={{ 'line-color': 'rgba(0,0,0,0.15)', 'line-width': 8 }}
             />
-            <Mapbox.LineLayer
+            <Layer
+              type='line'
               id='routeLine'
-              style={{
-                lineColor: '#FF6B35',
-                lineWidth: 5,
-                lineCap: 'round',
-                lineJoin: 'round',
-              }}
+              layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+              paint={{ 'line-color': '#FF6B35', 'line-width': 5 }}
             />
-          </Mapbox.ShapeSource>
+          </GeoJSONSource>
         )}
-      </Mapbox.MapView>
+      </Map>
     </View>
   );
 }
