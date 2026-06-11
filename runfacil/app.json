@@ -1,0 +1,86 @@
+{
+  "expo": {
+    "name": "RunFácil",
+    "slug": "runfacil",
+    "version": "1.0.0",
+    "scheme": "runfacil",
+    "orientation": "portrait",
+    "icon": "./assets/icons/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/icons/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FF6B35"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.arturgomes.runfacil",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "RunFácil precisa da sua localização para rastrear suas corridas.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "RunFácil precisa da sua localização em segundo plano para continuar rastreando enquanto o app está minimizado.",
+        "NSBluetoothAlwaysUsageDescription": "RunFácil usa Bluetooth para conectar ao seu smartwatch e monitorar sua frequência cardíaca."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icons/adaptive-icon.png",
+        "backgroundColor": "#FF6B35"
+      },
+      "package": "com.arturgomes.runfacil",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "BLUETOOTH",
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_SCAN",
+        "android.permission.health.READ_HEART_RATE",
+        "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
+        "android.permission.health.READ_STEPS"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-asset",
+      "expo-localization",
+      "@maplibre/maplibre-react-native",
+      "expo-health-connect",
+      "./plugins/withHealthConnectQueries",
+      [
+        "@kingstinct/react-native-healthkit",
+        {
+          "NSHealthShareUsageDescription": "RunFácil lê frequência cardíaca e calorias do Apple Health para enriquecer o resumo da sua corrida.",
+          "NSHealthUpdateUsageDescription": false,
+          "background": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "newArchEnabled": true,
+            "minSdkVersion": 26,
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36
+          },
+          "ios": {
+            "newArchEnabled": true
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
